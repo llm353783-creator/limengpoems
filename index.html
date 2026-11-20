@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>当李白遇到孟浩然 · 诗歌互文网络可视化</title>
+<meta name="description" content="以 4,911 组句级互文对照为基础，观察李白与孟浩然诗歌的文本相似网络。数据来自李白.csv、孟浩然.csv、李白-孟浩然.csv。">
+<style>
+:root{
+  --paper:#F7F3E9;
+  --paper-2:#FBF8F1;
+  --ink:#221E1A;
+  --ink-soft:#5A5148;
+  --ink-faint:#8A7F70;
+  --vermilion:#9C2B1F;
+  --green:#4A5A4E;
+  --line:#DDD2BD;
+  --line-soft:#EAE1CD;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Noto Serif SC","Songti SC","SimSun","Source Han Serif SC",serif;
+  line-height:1.75;font-size:15px;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px;}
+.num{font-family:"SF Mono",Consolas,"Courier New",monospace;font-variant-numeric:tabular-nums;}
+
+/* ---------- 右侧章节导航 ---------- */
+.rail{position:fixed;right:18px;top:50%;transform:translateY(-50%);z-index:20;
+  display:flex;flex-direction:column;gap:12px;align-items:flex-end;}
+.rail a{font-size:11px;letter-spacing:1px;color:var(--ink-faint);text-decoration:none;
+  display:flex;align-items:center;gap:7px;opacity:.72;transition:opacity .2s,color .2s;}
+.rail a i{display:block;width:16px;height:1px;background:var(--ink-faint);transition:width .25s,background .2s;}
+.rail a.on{color:var(--vermilion);opacity:1;}
+.rail a.on i{width:30px;background:var(--vermilion);}
+@media (max-width:1100px){.rail{display:none;}}
+
+/* ---------- 封面 ---------- */
+.cover{min-height:100vh;background:var(--paper);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:26px 20px 54px;position:relative;}
+.cover img{max-height:calc(100vh - 110px);max-width:100%;width:auto;
+  box-shadow:0 22px 50px rgba(34,30,26,.16);}
+.cover .hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
+  font-size:11px;letter-spacing:3px;color:var(--ink-faint);}
+
+/* ---------- 通用区块 ---------- */
+section{padding:74px 0 84px;border-top:1px solid var(--line-soft);}
+section:first-of-type{border-top:none;}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px;}
+.sec-no{font-size:11px;letter-spacing:2px;color:var(--vermilion);}
+.sec-title{font-size:24px;font-weight:700;letter-spacing:1px;}
+.sec-sub{font-size:13px;color:var(--ink-faint);margin-bottom:26px;letter-spacing:.5px;}
+.lead{color:var(--ink-soft);font-size:14.5px;max-width:760px;}
+
+/* ---------- 02 生平 ---------- */
+.two-track{display:flex;gap:26px;flex-wrap:wrap;margin-top:22px;}
+.track{flex:1 1 420px;min-width:0;}
+.track-head{display:flex;align-items:baseline;gap:9px;border-bottom:1px solid var(--line);padding-bottom:8px;}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.t-leading{color:var(--vermilion);}
+.m-leading{color:var(--green);}
+.track-head b{font-size:16px;}
+.track-head span{font-size:11.5px;color:var(--ink-faint);letter-spacing:1px;}
+.nodes{margin-top:14px;padding-left:14px;border-left:2px solid var(--line);}
+.node{position:relative;padding:0 0 18px 12px;}
+.node .pin{position:absolute;left:-19px;top:7px;width:7px;height:7px;border-radius:50%;}
+.node .year{font-size:11px;letter-spacing:1px;font-weight:700;}
+.node .event{font-size:13px;color:var(--ink-soft);line-height:1.7;margin-top:2px;}
+.poem-card{margin-top:7px;background:#fff;border:1px solid var(--line);padding:9px 11px;}
+.poem-card.star{border:2px solid var(--vermilion);background:#FFFDF7;}
+.poem-card .pt{font-size:14px;font-weight:700;}
+.poem-card .pl{font-size:13px;color:var(--ink-soft);margin-top:3px;}
+.poem-card .pst{font-size:11px;color:var(--ink-faint);margin-top:5px;}
+.poem-card .acts{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;}
+
+/* ---------- 通用控件 ---------- */
+.btn{font-family:inherit;font-size:12px;padding:4px 10px;border:1px solid var(--vermilion);
+  background:#fff;color:var(--vermilion);cursor:pointer;transition:.18s;border-radius:2px;}
+.btn:hover{background:var(--vermilion);color:#fff;}
+.btn.ghost{border-color:var(--line);color:var(--ink-soft);}
+.btn.ghost:hover{background:var(--ink);border-color:var(--ink);color:#fff;}
+.btn:focus-visible{outline:2px solid var(--vermilion);outline-offset:2px;}
+
+.panel{background:#fff;border:1px solid var(--line);padding:14px 16px;}
+.toolbar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;
+  background:#fff;border:1px solid var(--line);padding:12px 16px;margin-bottom:16px;}
+.tool{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink-soft);}
+input[type=range]{-webkit-appearance:none;appearance:none;width:190px;height:2px;
+  background:var(--line);outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;
+  border-radius:50%;background:var(--vermilion);cursor:pointer;border:2px solid #fff;
+  box-shadow:0 0 0 1px var(--vermilion);}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;
+  background:var(--vermilion);border:2px solid #fff;cursor:pointer;}
+.g-val{font-family:Consolas,monospace;color:var(--ink);font-weight:700;}
+.count{font-size:12px;color:var(--ink-faint);}
+.count b{color:var(--ink);}
+.chips{display:flex;gap:6px;flex-wrap:wrap;}
+.chip{font-family:inherit;font-size:11.5px;padding:3px 8px;border:1px solid var(--line);
+  background:var(--paper-2);color:var(--ink-soft);cursor:pointer;border-radius:2px;}
+.chip:hover,.chip.on{border-color:var(--vermilion);color:var(--vermilion);}
+
+/* ---------- 03 方法 ---------- */
+.steps{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 20px;}
+.step{flex:1 1 220px;background:#fff;border:1px solid var(--line);padding:13px 15px;position:relative;}
+.step .sn{font-size:11px;color:var(--vermilion);letter-spacing:2px;}
+.step h4{margin:4px 0 5px;font-size:14px;}
+.step p{margin:0;font-size:12.5px;color:var(--ink-soft);line-height:1.7;}
+.fields{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px;background:#fff;}
+.fields th,.fields td{border:1px solid var(--line);padding:7px 10px;text-align:left;}
+.fields th{background:var(--paper-2);font-weight:700;color:var(--ink);}
+.fields td.mono{font-family:Consolas,monospace;color:var(--ink-soft);}
+.note{margin-top:16px;border-left:3px solid var(--vermilion);background:var(--paper-2);
+  padding:11px 14px;font-size:12.5px;color:var(--ink-soft);line-height:1.8;}
+
+/* ---------- 04 统计 ---------- */
+.charts{display:flex;gap:16px;flex-wrap:wrap;}
+.chart-box{flex:1 1 420px;min-width:0;background:#fff;border:1px solid var(--line);padding:10px 8px 4px;}
+.chart-box h4{margin:4px 0 0 8px;font-size:12.5px;color:var(--ink-soft);font-weight:400;}
+.chart{width:100%;height:330px;}
+
+/* ---------- 05 句对读 ---------- */
+.pair{display:flex;gap:14px;flex-wrap:wrap;}
+.side{flex:1 1 380px;min-width:0;background:#fff;border:1px solid var(--line);padding:16px 18px;}
+.side .who{font-size:11px;letter-spacing:2px;}
+.side .who.li{color:var(--green);}
+.side .who.mg{color:var(--vermilion);}
+.side .line{font-size:22px;line-height:1.85;margin:10px 0 4px;letter-spacing:1px;word-break:break-all;}
+.side .src{font-size:12px;color:var(--ink-faint);}
+.side .src b{color:var(--ink-soft);font-weight:400;}
+.hl{color:var(--vermilion);font-weight:700;}
+.pair-foot{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+  margin-top:14px;font-size:12px;color:var(--ink-faint);}
+.pager{display:flex;gap:8px;align-items:center;}
+.ctx{margin-top:16px;background:#fff;border:1px solid var(--line);}
+.ctx-head{display:flex;justify-content:space-between;align-items:center;
+  padding:10px 16px;cursor:pointer;user-select:none;font-size:12.5px;color:var(--ink-soft);}
+.ctx-body{padding:0 16px 16px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media (max-width:720px){.ctx-body{grid-template-columns:1fr;}}
+.ctx-poem{min-width:0;}
+.ctx-poem h5{margin:6px 0 6px;font-size:13px;font-weight:700;}
+.ctx-poem ol{margin:0;padding-left:1.4em;font-size:13px;line-height:1.95;color:var(--ink-soft);}
+.ctx-poem li{margin-bottom:1px;word-break:break-all;}
+.ctx-poem li.cur{color:var(--vermilion);font-weight:700;}
+.meta-line{font-size:11px;color:var(--ink-faint);margin-top:10px;font-family:Consolas,monospace;}
+
+/* ---------- 06 图谱 ---------- */
+.graph-tools{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
+.graph-tools input[type=text]{font-family:inherit;font-size:12.5px;padding:5px 10px;
+  border:1px solid var(--line);background:#fff;color:var(--ink);width:180px;}
+.graph-tools select{font-family:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);
+  background:#fff;color:var(--ink-soft);cursor:pointer;}
+#graph{width:100%;height:560px;background:#fff;border:1px solid var(--line);}
+.side-detail{margin-top:14px;background:#fff;border:1px solid var(--line);padding:14px 16px;font-size:13px;color:var(--ink-soft);}
+.side-detail h4{margin:0 0 8px;font-size:14px;color:var(--ink);}
+.pair-row{padding:7px 0;border-top:1px dashed var(--line);cursor:pointer;}
+.pair-row:hover{background:var(--paper-2);}
+.pair-row .pr-g{float:right;font-family:Consolas,monospace;font-size:11px;color:var(--vermilion);}
+
+/* ---------- 07 案例 ---------- */
+.cases{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
+.case{background:#fff;border:1px solid var(--line);padding:14px 16px;display:flex;flex-direction:column;gap:8px;}
+.case .cg{font-family:Consolas,monospace;font-size:11px;color:var(--vermilion);letter-spacing:1px;}
+.case .cl{font-size:15.5px;line-height:1.8;word-break:break-all;}
+.case .cs{font-size:11px;color:var(--ink-faint);}
+.case .cacts{margin-top:auto;display:flex;gap:6px;}
+
+/* ---------- 08 声明 ---------- */
+.declare{background:var(--ink);color:#F2E9D8;padding:34px 36px;line-height:2;font-size:13px;}
+.declare h3{margin:0 0 12px;font-size:16px;letter-spacing:2px;color:#F2E9D8;}
+.declare p{margin:0 0 8px;color:#D8CDBA;}
+.declare .fine{font-size:11.5px;color:#9C9484;margin-top:16px;}
+.declare .thanks{margin-top:16px;padding-top:16px;border-top:1px solid rgba(242,233,216,.16);
+  color:#F2E9D8;letter-spacing:.3px;}
+.gdef{margin-top:14px;}
+.foot{padding:26px 0 40px;text-align:center;font-size:11.5px;color:var(--ink-faint);letter-spacing:1px;}
+
+@media (max-width:760px){
+  section{padding:52px 0 60px;}
+  .sec-title{font-size:20px;}
+  .side .line{font-size:19px;}
+  .cover{min-height:auto;padding:0 0 64px;justify-content:flex-start;}
+  .cover img{width:100%;max-width:100%;max-height:none;box-shadow:0 12px 30px rgba(34,30,26,.14);}
+  .cover .hint{position:static;transform:none;margin-top:20px;}
+  #graph{height:420px;}
+}
+</style>
+</head>
+<body>
+
+<nav class="rail" id="rail">
+  <a href="#cover" data-sec="cover"><span>封面</span><i></i></a>
+  <a href="#life" data-sec="life"><span>01 生平</span><i></i></a>
+  <a href="#overview" data-sec="overview"><span>02 总览</span><i></i></a>
+  <a href="#read" data-sec="read"><span>03 句对</span><i></i></a>
+  <a href="#graph-sec" data-sec="graph-sec"><span>04 图谱</span><i></i></a>
+  <a href="#cases" data-sec="cases"><span>05 案例</span><i></i></a>
+  <a href="#declare" data-sec="declare"><span>06 声明</span><i></i></a>
+</nav>
+
+<!-- ============ 封面 ============ -->
+<header class="cover" id="cover">
+  <img src="./assets/cover.jpg" alt="当李白遇到孟浩然：水墨人物封面">
+  <div class="hint">向 下 滚 动</div>
+</header>
+
+<div class="wrap">
+
+<!-- ============ 01 生平 ============ -->
+<section id="life">
+  <div class="sec-head"><span class="sec-no">01</span><h2 class="sec-title">双轨生平 · 十首诗</h2></div>
+  <div class="sec-sub">两条生命线，十个路口，十首诗。卡片上的互文数据由数据集实时统计。</div>
+  <p class="lead">孟浩然长李白十二岁，卒于李白之前二十二年。两人真正可考的相遇在江夏——李白在此送他东下扬州。此后李白的诗里反复出现这位“孟夫子”，而孟浩然的诗留在了山水与田园之间。</p>
+
+  <div class="two-track">
+    <div class="track">
+      <div class="track-head"><span class="dot" style="background:var(--vermilion)"></span><b class="t-leading">孟浩然</b><span>689 — 740</span></div>
+      <div class="nodes" id="track-meng"></div>
+    </div>
+    <div class="track">
+      <div class="track-head"><span class="dot" style="background:var(--green)"></span><b class="m-leading">李白</b><span>701 — 762</span></div>
+      <div class="nodes" id="track-li"></div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ 02 总览 ============ -->
+<section id="overview">
+  <div class="sec-head"><span class="sec-no">02</span><h2 class="sec-title">全景 · 分布与命中</h2></div>
+  <div class="sec-sub">先看清全库的分数地形，再决定从哪一档读起。</div>
+
+  <div class="toolbar">
+    <div class="tool"><span>相似度阈值</span>
+      <input type="range" id="slider-ov" min="7000" max="10000" step="10" value="7000">
+      <span class="g-val" id="gval-ov">7000</span>
+    </div>
+    <div class="chips" id="bins-ov"></div>
+    <div class="count" id="count-ov"></div>
+  </div>
+
+  <div class="charts">
+    <div class="chart-box"><h4>相似度分档 · 句对数量（点击柱体即锁定该档）</h4><div class="chart" id="chart-hist"></div></div>
+    <div class="chart-box"><h4>命中数最高的诗（点击条即筛该诗）</h4><div class="chart" id="chart-rank"></div></div>
+  </div>
+</section>
+
+<!-- ============ 03 句对读 ============ -->
+<section id="read">
+  <div class="sec-head"><span class="sec-no">03</span><h2 class="sec-title">句对细读</h2></div>
+  <div class="sec-sub">左李白，右孟浩然。朱色为两句共有的字，只是看的辅助，不参与打分。</div>
+
+  <div class="toolbar">
+    <div class="tool"><span>相似度阈值</span>
+      <input type="range" id="slider-read" min="7000" max="10000" step="10" value="7000">
+      <span class="g-val" id="gval-read">7000</span>
+    </div>
+    <div class="chips" id="bins-read"></div>
+    <div class="tool"><label><input type="checkbox" id="hl-toggle" checked> 标出共有的字</label></div>
+    <div class="count" id="count-read"></div>
+  </div>
+
+  <div class="pair">
+    <div class="side" id="side-li">
+      <div class="who li">李 白</div>
+      <div class="line" id="line-li">—</div>
+      <div class="src" id="src-li"></div>
+    </div>
+    <div class="side" id="side-mg">
+      <div class="who mg">孟 浩 然</div>
+      <div class="line" id="line-mg">—</div>
+      <div class="src" id="src-mg"></div>
+    </div>
+  </div>
+
+  <div class="pair-foot">
+    <div class="meta-line" id="pair-meta">—</div>
+    <div class="pager">
+      <button class="btn ghost" id="btn-prev">← 上一组</button>
+      <span class="count" id="pager-num">—</span>
+      <button class="btn ghost" id="btn-next">下一组 →</button>
+      <button class="btn ghost" id="btn-rand">随机一组</button>
+      <button class="btn" id="btn-to-graph">在图谱里看这两首</button>
+    </div>
+  </div>
+
+  <div class="ctx" id="ctx">
+    <div class="ctx-head" id="ctx-head"><span>原诗上下文（点击展开／收起）</span><span id="ctx-caret">▾</span></div>
+    <div class="ctx-body" id="ctx-body"></div>
+  </div>
+
+  <div class="note" style="font-size:12px">
+    快捷键：← → 翻句对，空格 展开／收起上下文。句子序号在页面上从“第 1 句”起算，数据层仍保留 0 起的原始索引，见每张卡片底部的溯源行。
+  </div>
+</section>
+
+<!-- ============ 04 图谱 ============ -->
+<section id="graph-sec">
+  <div class="sec-head"><span class="sec-no">04</span><h2 class="sec-title">诗与诗的互文网络</h2></div>
+  <div class="sec-sub">一个点是一首诗，一条线是两首诗之间的全部匹配句对。线越粗，最高分越高。</div>
+
+  <div class="note gdef">
+    <b>「显示范围」是什么：</b>它不是一个数据字段，是本页为了让网络读得清而加的一层<b>画布筛选</b>。
+    入选规则只有两条——<b>节点</b>：该诗与对方诗人的命中组数 ≥ N（核心子图取 15，中等网络取 8，全部诗作取 0，即不设限）；
+    <b>连线</b>：两端诗都在画面上，且这组句对通过了阈值。7000 阈值下，核心子图是 164 个诗节点、519 条连线，全部诗作是 1,190 个诗节点、4,713 条连线。
+    这层筛选不改变任何 G 分值、不删除记录、不动句内索引；把下拉切回「全部诗作」即还原全量。
+    选 15 组作为默认，是因为 4,911 组句对铺满画布时只剩一团线，读不出谁与谁最密——筛到 164 个节点，主干关系才浮出来。
+  </div>
+
+  <div class="graph-tools">
+    <input type="text" id="search" placeholder="输入诗题定位节点">
+    <div class="tool"><span>阈值</span>
+      <input type="range" id="slider-graph" min="7000" max="10000" step="10" value="7000">
+      <span class="g-val" id="gval-graph">7000</span>
+    </div>
+    <label class="tool"><span>显示范围</span>
+      <select id="graph-scope">
+        <option value="15" selected>核心子图（命中 ≥ 15 组）</option>
+        <option value="8">中等网络（命中 ≥ 8 组）</option>
+        <option value="0">全部诗作</option>
+      </select>
+    </label>
+    <button class="btn ghost" id="btn-reset">复位</button>
+    <div class="count" id="count-graph"></div>
+  </div>
+
+  <div id="graph"></div>
+  <div class="side-detail" id="graph-detail">点击节点看这首诗的全部匹配，点击连线看两首诗之间的全部句对。</div>
+</section>
+
+<!-- ============ 05 案例 ============ -->
+<section id="cases">
+  <div class="sec-head"><span class="sec-no">05</span><h2 class="sec-title">六个高分句对</h2></div>
+  <div class="sec-sub">按数据集原始分值取前六，不做人工挑选。</div>
+  <div class="cases" id="case-list"></div>
+</section>
+
+<!-- ============ 06 声明 ============ -->
+<section id="declare">
+  <div class="sec-head"><span class="sec-no">06</span><h2 class="sec-title">数据来源与声明</h2></div>
+  <div class="declare">
+    <h3>DECLARATION</h3>
+    <p>一、本页全部诗题、诗句、诗歌编号、句内序号与相似度分值，均来自 <b>李白.csv</b>、<b>孟浩然.csv</b>、<b>李白-孟浩然.csv</b> 三份原始数据，未编造、未补写、未校改任何诗句与匹配关系。</p>
+    <p>二、相似度为数据集 G 列的 10000 制原始分值；页面区间限定 7000–10000，原始文件完整保留全部记录。筛选与边权一律使用原始分值。</p>
+    <p>三、数据集句内索引自 0 起计数，页面为便于阅读统一加 1 显示为“第 n 句”，底层索引原样保留并在卡片上标注，可逐条回查。</p>
+    <p>四、部分诗题、文字与通行整理本存在异文（如《静夜思》作“床前看月光”、《黄鹤楼送孟浩然之广陵》作“碧山尽”），本页一律沿用数据集文本，不改回通行本。</p>
+    <p>五、机器相似度只反映字面接近，不等于化用、酬唱或影响关系；本页是观察工具，不是文学结论。</p>
+    <p class="thanks">六、本页的选题、方法与数据，承上海交通大学数字人文段思宇老师指导并提供，谨致谢忱。</p>
+    <p class="fine" id="decl-meta">—</p>
+  </div>
+</section>
+
+<div class="foot">当李白遇到孟浩然 · 诗歌互文网络可视化 · 单页静态站点</div>
+</div>
+
+<script src="./assets/echarts.min.js"></script>
+<script src="./data/data.js"></script>
+<script>
+(function(){
+  if(!window.SITE_DATA){ document.body.insertAdjacentHTML('afterbegin','<p style="padding:20px;color:#9C2B1F">未能读取 data/data.js，请确认该文件与 index.html 一同部署。</p>'); return; }
+  var D = window.SITE_DATA, M = D.meta;
+  var state = {g:7000, idx:0, hl:true, scope:15, current:[]};
+
+  /* ---------- 工具 ---------- */
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function isPunct(ch){return /[，。、；：？！“”‘’《》（）\s·]/.test(ch);}
+  function commonChars(a,b){
+    var setB = {}, i, used = {};
+    for(i=0;i<b.length;i++){ var c=b[i]; if(isPunct(c)) continue; setB[c]=(setB[c]||0)+1; }
+    var res = {};
+    for(i=0;i<a.length;i++){
+      var c=a[i]; if(isPunct(c)) continue;
+      if(setB[c] > 0){ setB[c]--; res[c]=true; }
+    }
+    return res;
+  }
+  function markSentence(text, other, enable){
+    var t = String(text||'');
+    if(!enable) return esc(t);
+    var com = commonChars(t, String(other||''));
+    var out='';
+    for(var i=0;i<t.length;i++){
+      var c=t[i];
+      if(com[c] && !isPunct(c)) out += '<span class="hl">'+esc(c)+'</span>';
+      else out += esc(c);
+    }
+    return out;
+  }
+  function fmt(n){ return n.toLocaleString('en-US'); }
+  function poemOf(side,id){ return side==='li' ? D.li_poems[id] : D.meng_poems[id]; }
+  function statOf(side,id){ return D.poem_stat[side+':'+id]; }
+  function filtered(){ return D.pairs.filter(function(p){return p.g_raw >= state.g;}); }
+
+  /* ---------- 元信息 ---------- */
+  document.getElementById('decl-meta').textContent =
+    '数据集：李白 '+fmt(M.li_poems)+' 首 / '+fmt(M.li_sentences)+' 句；孟浩然 '+fmt(M.meng_poems)+' 首 / '+fmt(M.meng_sentences)+
+    ' 句；互文句对 '+fmt(M.pairs)+' 组；相似度区间 '+M.g_min+'–'+M.g_max+'。';
+
+  /* ---------- 01 生平 ---------- */
+  // 生平事件为通行的文史叙述；诗与数据由 poem_stat 实时统计，不写死数字。
+  var LIFE = [
+    {side:'meng', id:'1803',  year:'689 · 襄阳', star:false,
+     event:'生于襄阳。早年隐居鹿门山，读书自适，未入仕途。'},
+    {side:'meng', id:'24932', year:'约开元中期 · 田家', star:false,
+     event:'隐居襄阳时应故人之邀至田庄，写田家之交、重阳之约。'},
+    {side:'meng', id:'20969', year:'728 · 长安落第', star:false,
+     event:'年四十入长安应进士，不第，岁暮归南山，有“不才明主弃”之叹。'},
+    {side:'meng', id:'20407', year:'约 733—735 · 干谒', star:false,
+     event:'张九龄为相，献诗求荐，终未得一官，“坐观垂钓者，空有羡鱼情”。'},
+    {side:'meng', id:'2798',  year:'约 730 · 吴越舟中', star:false,
+     event:'落第后自洛之越，舟泊江上，客愁与江月相照。'},
+    {side:'li',   id:'1405',  year:'约 725 · 出蜀东游', star:false,
+     event:'少年出蜀，辞亲远游，客中望月思乡。'},
+    {side:'li',   id:'50957', year:'约 725 · 初游庐山', star:false,
+     event:'东下浔阳，登香炉峰观瀑，山水长诗的起点。'},
+    {side:'li',   id:'9418',  year:'约 730 · 江夏送别 ★', star:true,
+     event:'与孟浩然相遇于江夏，黄鹤楼送其东下扬州。全站唯一的两轨交汇点。'},
+    {side:'li',   id:'48776', year:'742—744 · 长安放还', star:false,
+     event:'奉诏入京供奉翰林，旋被赐金放还，“长风破浪会有时”。'},
+    {side:'li',   id:'53496', year:'约 742—744 · 长安（一说开元末）', star:false,
+     event:'送友人入蜀而作，蜀道之险写成他一生的隐喻。'}
+  ];
+
+  function renderLife(){
+    var groups = {meng:[], li:[]};
+    LIFE.forEach(function(it){ groups[it.side].push(it); });
+    Object.keys(groups).forEach(function(side){
+      var host = document.getElementById(side==='li'?'track-li':'track-meng');
+      host.innerHTML = groups[side].map(function(it){
+        var poem = poemOf(side, it.id);
+        var st = statOf(side, it.id);
+        var color = side==='li'?'var(--green)':'var(--vermilion)';
+        if(!poem || !st) return '';
+        return '<div class="node">'+
+          '<span class="pin" style="background:'+color+'"></span>'+
+          '<div class="year" style="color:'+color+'">'+esc(it.year)+'</div>'+
+          '<div class="event">'+esc(it.event)+'</div>'+
+          '<div class="poem-card'+(it.star?' star':'')+'">'+
+            '<div class="pt">《'+esc(poem.title)+'》</div>'+
+            '<div class="pl">'+esc((poem.sentences||[]).slice(0,2).join(''))+'</div>'+
+            '<div class="pst">数据集中互文命中 '+fmt(st.pairs)+' 组 · 最高 '+fmt(st.max_g)+'</div>'+
+            '<div class="acts">'+
+              '<button class="btn ghost" data-act="pair" data-side="'+side+'" data-id="'+it.id+'">读它的句对</button>'+
+              '<button class="btn ghost" data-act="graph" data-side="'+side+'" data-id="'+it.id+'">图谱定位</button>'+
+            '</div>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+    });
+  }
+
+  /* ---------- 阈值控件（三处共用一份状态） ---------- */
+  var BINS = [
+    {label:'7000–7300', min:7000, max:7300},
+    {label:'7300–7600', min:7300, max:7600},
+    {label:'7600–8000', min:7600, max:8000},
+    {label:'8000–8600', min:8000, max:8600},
+    {label:'8600+',     min:8600, max:10001}
+  ];
+  function renderChips(){
+    ['bins-ov','bins-read'].forEach(function(id){
+      var host = document.getElementById(id);
+      host.innerHTML = BINS.map(function(b){
+        return '<button class="chip'+(state.g===b.min?' on':'')+'" data-g="'+b.min+'">'+b.label+'</button>';
+      }).join('');
+    });
+  }
+  function syncSliders(){
+    ['slider-ov','slider-read','slider-graph'].forEach(function(id){
+      document.getElementById(id).value = state.g;
+    });
+    ['gval-ov','gval-read','gval-graph'].forEach(function(id){
+      document.getElementById(id).textContent = state.g;
+    });
+    renderChips();
+  }
+  function setThreshold(g){
+    state.g = Number(g);
+    state.idx = 0;
+    state.current = filtered();
+    syncSliders();
+    renderCounts();
+    renderPair();
+    renderOverviewCharts();
+    renderGraph();
+  }
+  function renderCounts(){
+    var txt = '当前保留 <b>'+fmt(state.current.length)+'</b> / '+fmt(M.pairs)+' 组句对';
+    document.getElementById('count-ov').innerHTML = txt;
+    document.getElementById('count-read').innerHTML = txt;
+    document.getElementById('count-graph').innerHTML = txt;
+  }
+
+  /* ---------- 03 总览图表 ---------- */
+  var chartHist=null, chartRank=null, hasEcharts = !!window.echarts;
+  function initCharts(){
+    if(!hasEcharts) return;
+    chartHist = echarts.init(document.getElementById('chart-hist'));
+    chartRank = echarts.init(document.getElementById('chart-rank'));
+    chartGraph = echarts.init(document.getElementById('graph'));
+    chartHist.on('click', function(p){
+      if(p.componentType==='series'){ setThreshold(BINS[p.dataIndex].min); }
+    });
+    chartRank.on('click', function(p){
+      var item = rankData()[p.dataIndex];
+      if(!item) return;
+      state.current = filtered().filter(function(x){ return (item.side==='li'? x.li_poem_id : x.meng_poem_id) === item.id; });
+      state.idx = 0; renderPair(); renderRankChart();
+      document.getElementById('read').scrollIntoView({behavior:'smooth'});
+    });
+    chartGraph.on('click', function(p){
+      if(!p.data) return;
+      if(p.dataType==='edge'){ showEdge(p.data.source, p.data.target); }
+      else { showPoem(p.data.id); }
+    });
+  }
+  function binCounts(){
+    var counts = BINS.map(function(){return 0;});
+    D.pairs.forEach(function(p){
+      for(var i=0;i<BINS.length;i++){
+        if(p.g_raw >= BINS[i].min && p.g_raw < BINS[i].max){ counts[i]++; break; }
+      }
+    });
+    return counts;
+  }
+  function renderOverviewCharts(){
+    if(!hasEcharts) return;
+    var counts = binCounts();
+    chartHist.setOption({
+      grid:{left:52,right:18,top:18,bottom:34},
+      tooltip:{trigger:'axis', formatter:function(ps){ return ps[0].axisValue+'<br>'+fmt(ps[0].value)+' 组'; }},
+      xAxis:{type:'category',data:BINS.map(function(b){return b.label;}),
+        axisLine:{lineStyle:{color:'#DDD2BD'}},axisTick:{show:false},
+        axisLabel:{color:'#8A7F70',fontSize:11}},
+      yAxis:{type:'value',name:'组',nameTextStyle:{color:'#8A7F70',fontSize:11},
+        splitLine:{lineStyle:{color:'#F0E8D6'}},axisLabel:{color:'#8A7F70',fontSize:11}},
+      series:[{type:'bar',barWidth:'46%',
+        data:counts.map(function(c,i){
+          return {value:c, itemStyle:{color: BINS[i].min>=state.g ? '#9C2B1F' : '#D9CDBB'}};
+        }),
+        label:{show:true,position:'top',color:'#5A5148',fontSize:11,formatter:function(p){return fmt(p.value);}}
+      }]
+    }, true);
+    renderRankChart();
+  }
+  function rankData(){
+    var all = Object.keys(D.poem_stat).map(function(k){return D.poem_stat[k];});
+    return all.sort(function(a,b){ return b.pairs-a.pairs; }).slice(0,12);
+  }
+  function renderRankChart(){
+    var data = rankData();
+    var names = data.map(function(d){ return d.title.length>14 ? d.title.slice(0,14)+'…' : d.title; });
+    chartRank.setOption({
+      grid:{left:16,right:22,top:12,bottom:18,containLabel:true},
+      tooltip:{trigger:'axis',axisPointer:{type:'shadow'},
+        formatter:function(ps){
+          var d = data[ps[0].dataIndex];
+          return (d.side==='li'?'李白':'孟浩然')+'《'+d.title+'》<br>命中 '+fmt(d.pairs)+' 组 · 最高 '+fmt(d.max_g);
+        }},
+      xAxis:{type:'value',splitLine:{lineStyle:{color:'#F0E8D6'}},axisLabel:{color:'#8A7F70',fontSize:11}},
+      yAxis:{type:'category',data:names,inverse:true,axisLine:{lineStyle:{color:'#DDD2BD'}},
+        axisTick:{show:false},axisLabel:{color:'#5A5148',fontSize:11}},
+      series:[{type:'bar',barMaxWidth:14,
+        data:data.map(function(d){return {value:d.pairs,itemStyle:{color:d.side==='li'?'#4A5A4E':'#9C2B1F'}};}),
+        label:{show:true,position:'right',color:'#5A5148',fontSize:10,formatter:function(p){return fmt(p.value);}}
+      }]
+    }, true);
+  }
+
+  /* ---------- 04 句对读 ---------- */
+  function renderPair(){
+    if(!state.current.length){
+      document.getElementById('line-li').textContent='—';
+      document.getElementById('line-mg').textContent='—';
+      document.getElementById('pager-num').textContent='无匹配';
+      document.getElementById('ctx-body').innerHTML = '<div style="padding:10px;color:#9C2B1F">当前阈值下没有句对，请调低阈值。</div>';
+      return;
+    }
+    if(state.idx >= state.current.length) state.idx = 0;
+    var p = state.current[state.idx];
+    var liP = poemOf('li', p.li_poem_id), mgP = poemOf('meng', p.meng_poem_id);
+
+    document.getElementById('line-li').innerHTML = state.hl ? markSentence(p.li_sent, p.meng_sent, true) : esc(p.li_sent);
+    document.getElementById('line-mg').innerHTML = state.hl ? markSentence(p.meng_sent, p.li_sent, true) : esc(p.meng_sent);
+    document.getElementById('src-li').innerHTML = '《'+esc(liP.title)+'》 · <b>第 '+(p.li_sent_idx+1)+' 句</b>';
+    document.getElementById('src-mg').innerHTML = '《'+esc(mgP.title)+'》 · <b>第 '+(p.meng_sent_idx+1)+' 句</b>';
+    document.getElementById('pager-num').textContent = (state.idx+1)+' / '+fmt(state.current.length);
+    document.getElementById('pair-meta').textContent =
+      'G='+p.g_raw+'　李白 id '+p.li_poem_id+' / 句序 '+p.li_sent_idx+'（0 起）　孟 id '+p.meng_poem_id+' / 句序 '+p.meng_sent_idx+'（0 起）';
+
+    var body = document.getElementById('ctx-body');
+    function poemBlock(P, cur, side){
+      var lis='';
+      for(var i=0;i<P.sentences.length;i++){
+        var s = P.sentences[i]; if(!s) continue;
+        lis += '<li'+(i===cur?' class="cur"':'')+'>'+esc(s)+'</li>';
+      }
+      return '<div class="ctx-poem"><h5>'+esc(P.title)+'　<span style="font-weight:400;font-size:11px;color:#8A7F70">'+
+        (side==='li'?'李白':'孟浩然')+' · 共 '+P.sentences.filter(function(x){return x;}).length+' 句</span></h5><ol>'+lis+'</ol></div>';
+    }
+    body.innerHTML = poemBlock(liP, p.li_sent_idx, 'li') + poemBlock(mgP, p.meng_sent_idx, 'meng');
+  }
+
+  /* ---------- 05 图谱 ---------- */
+  var chartGraph=null;
+  function graphData(){
+    var pairs = filtered();
+    var scope = state.scope || 0;
+    // 先按"命中组数"筛出节点集合，再保留两端都在集合内的边
+    var allowed = {};
+    if(scope > 0){
+      Object.keys(D.poem_stat).forEach(function(k){
+        var s = D.poem_stat[k];
+        if(s.pairs >= scope) allowed[(s.side==='li'?'L':'M') + s.poem_id] = true;
+      });
+    }
+    var linkMap = {}, nodesUsed = {};
+    pairs.forEach(function(p){
+      var a = 'L'+p.li_poem_id, b = 'M'+p.meng_poem_id;
+      if(scope > 0 && (!allowed[a] || !allowed[b])) return;
+      var k = a+'|'+b;
+      if(!linkMap[k]) linkMap[k] = {source:a, target:b, count:0, maxG:0};
+      linkMap[k].count++;
+      if(p.g_raw > linkMap[k].maxG) linkMap[k].maxG = p.g_raw;
+      nodesUsed[a] = 'li';
+      nodesUsed[b] = 'meng';
+    });
+    var nodes = Object.keys(nodesUsed).map(function(nid){
+      var side = nodesUsed[nid], id = nid.slice(1);
+      var P = poemOf(side, id), st = statOf(side, id);
+      var full = P ? P.title : '';
+      var short = full.length > 7 ? full.slice(0, 7) + '…' : full;
+      var big = st && st.pairs >= 35;
+      return {
+        id:nid, name:short, fullTitle:full, side:side,
+        value: st?st.pairs:0,
+        symbolSize: Math.min(24, 5 + Math.sqrt(st?st.pairs:1)*1.7),
+        category: side==='li'?0:1,
+        itemStyle:{color: side==='li'?'#4A5A4E':'#9C2B1F'},
+        label:{show: !!big}
+      };
+    });
+    var links = Object.keys(linkMap).map(function(k){
+      var l = linkMap[k];
+      var w = 0.9 + (l.maxG-7000)/3000*3.2;
+      return {source:l.source, target:l.target, count:l.count, maxG:l.maxG,
+              lineStyle:{width:w, opacity:0.3, color:'#B9AB93'}};
+    });
+    return {nodes:nodes, links:links};
+  }
+  function renderGraph(){
+    if(!hasEcharts) return;
+    var gd = graphData();
+    chartGraph.setOption({
+      tooltip:{formatter:function(p){
+        if(p.dataType==='edge') return '最高 '+p.data.maxG+'<br>共 '+p.data.count+' 组句对';
+        return (p.data.side==='li'?'李白':'孟浩然')+'《'+p.data.fullTitle+'》<br>命中 '+fmt(p.data.value)+' 组';
+      }},
+      legend:[{data:['李白','孟浩然'],left:12,top:8,textStyle:{color:'#5A5148',fontSize:11},icon:'circle',itemWidth:9,itemHeight:9}],
+      series:[{
+        type:'graph', layout:'force', roam:true, draggable:true,
+        categories:[{name:'李白'},{name:'孟浩然'}],
+        data:gd.nodes, links:gd.links,
+        force:{repulsion:260, edgeLength:[70,190], gravity:0.06, layoutAnimation:true},
+        label:{show:gd.nodes.length<=140, position:'right', color:'#3B332B', fontSize:10, formatter:'{b}'},
+        emphasis:{focus:'adjacency', label:{show:true}},
+        lineStyle:{curveness:0.12}
+      }]
+    }, true);
+    document.getElementById('graph-detail').innerHTML =
+      '当前图谱：<b>'+fmt(gd.nodes.length)+'</b> 个诗节点，<b>'+fmt(gd.links.length)+'</b> 条诗对连线。点击查看详情。';
+  }
+  function pairListHTML(list, sideFilter){
+    return list.slice(0, 40).map(function(p){
+      var liP = poemOf('li', p.li_poem_id), mgP = poemOf('meng', p.meng_poem_id);
+      return '<div class="pair-row" data-li="'+p.li_poem_id+'" data-lii="'+p.li_sent_idx+'" data-mg="'+p.meng_poem_id+'" data-mgi="'+p.meng_sent_idx+'">'+
+        '<span class="pr-g">G '+p.g_raw+'</span>'+
+        esc(p.li_sent)+' <span style="color:#8A7F70">／</span> '+esc(p.meng_sent)+
+        '<div style="font-size:11px;color:#8A7F70">《'+esc(liP.title)+'》第'+(p.li_sent_idx+1)+'句　·　《'+esc(mgP.title)+'》第'+(p.meng_sent_idx+1)+'句</div>'+
+      '</div>';
+    }).join('') + (list.length>40 ? '<div style="font-size:11px;color:#8A7F70;padding-top:8px">仅显示前 40 组，共 '+fmt(list.length)+' 组。</div>' : '');
+  }
+  function showPoem(id){
+    var side = id[0]==='L'?'li':'meng', pid = id.slice(1);
+    var P = poemOf(side, pid), st = statOf(side, pid);
+    var list = filtered().filter(function(p){ return side==='li' ? p.li_poem_id===pid : p.meng_poem_id===pid; });
+    document.getElementById('graph-detail').innerHTML =
+      '<h4>'+(side==='li'?'李白':'孟浩然')+'《'+esc(P.title)+'》</h4>'+
+      '<div style="font-size:12px;color:#8A7F70;margin-bottom:6px">命中 '+fmt(st.pairs)+' 组 · 最高 '+fmt(st.max_g)+' · 全诗 '+
+        P.sentences.filter(function(x){return x;}).length+' 句</div>'+
+      pairListHTML(list);
+  }
+  function showEdge(source,target){
+    var lid = source.slice(1), mid = target.slice(1);
+    var list = filtered().filter(function(p){ return p.li_poem_id===lid && p.meng_poem_id===mid; });
+    var liP = poemOf('li', lid), mgP = poemOf('meng', mid);
+    document.getElementById('graph-detail').innerHTML =
+      '<h4>《'+esc(liP.title)+'》×《'+esc(mgP.title)+'》</h4>'+
+      '<div style="font-size:12px;color:#8A7F70;margin-bottom:6px">这组诗对共 '+fmt(list.length)+' 组句对</div>'+
+      pairListHTML(list);
+  }
+
+  /* ---------- 06 案例 ---------- */
+  function renderCases(){
+    var top = D.pairs.slice().sort(function(a,b){return b.g_raw-a.g_raw;}).slice(0,6);
+    document.getElementById('case-list').innerHTML = top.map(function(p){
+      var liP = poemOf('li', p.li_poem_id), mgP = poemOf('meng', p.meng_poem_id);
+      return '<div class="case">'+
+        '<div class="cg">G '+p.g_raw+'　/　数据集中排序第 '+(D.pairs.slice().sort(function(a,b){return b.g_raw-a.g_raw;}).indexOf(p)+1)+' 位</div>'+
+        '<div class="cl">'+markSentence(p.li_sent, p.meng_sent, true)+'</div>'+
+        '<div class="cs">李白《'+esc(liP.title)+'》第'+(p.li_sent_idx+1)+'句</div>'+
+        '<div class="cl" style="color:#5A5148">'+markSentence(p.meng_sent, p.li_sent, true)+'</div>'+
+        '<div class="cs">孟浩然《'+esc(mgP.title)+'》第'+(p.meng_sent_idx+1)+'句</div>'+
+        '<div class="cacts">'+
+          '<button class="btn ghost" data-act="case-pair" data-li="'+p.li_poem_id+'" data-lii="'+p.li_sent_idx+'" data-mg="'+p.meng_poem_id+'" data-mgi="'+p.meng_sent_idx+'">去读这一组</button>'+
+          '<button class="btn ghost" data-act="graph" data-side="li" data-id="'+p.li_poem_id+'">图谱定位</button>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  /* ---------- 跳转 ---------- */
+  function findPairIndex(li, lii, mg, mgi){
+    for(var i=0;i<state.current.length;i++){
+      var p = state.current[i];
+      if(p.li_poem_id===li && p.li_sent_idx===lii && p.meng_poem_id===mg && p.meng_sent_idx===mgi) return i;
+    }
+    return -1;
+  }
+  function jumpToPair(li,lii,mg,mgi){
+    var i = findPairIndex(li,lii,mg,mgi);
+    if(i<0){ state.g = 7000; state.current = filtered(); i = findPairIndex(li,lii,mg,mgi); }
+    if(i>=0){ state.idx = i; renderPair(); document.getElementById('read').scrollIntoView({behavior:'smooth'}); }
+  }
+  function focusGraph(id){
+    document.getElementById('graph-sec').scrollIntoView({behavior:'smooth'});
+    if(!chartGraph) return;
+    var idx = -1, gd = graphData();
+    for(var i=0;i<gd.nodes.length;i++){ if(gd.nodes[i].id===id){ idx=i; break; } }
+    if(idx<0) return;
+    chartGraph.dispatchAction({type:'highlight', seriesIndex:0, dataIndex:idx});
+    chartGraph.dispatchAction({type:'focusNodeAdjacency', seriesIndex:0, dataIndex:idx});
+    showPoem(id);
+  }
+  function poemPairs(side, pid){
+    state.current = D.pairs.filter(function(p){
+      return (side==='li' ? p.li_poem_id : p.meng_poem_id) === pid;
+    });
+    state.idx = 0; renderPair();
+    document.getElementById('read').scrollIntoView({behavior:'smooth'});
+  }
+
+  /* ---------- 事件 ---------- */
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    if(t.dataset && t.dataset.g){ setThreshold(t.dataset.g); return; }
+    if(t.dataset && t.dataset.act){
+      var a = t.dataset.act;
+      if(a==='pair') poemPairs(t.dataset.side, t.dataset.id);
+      if(a==='graph') focusGraph((t.dataset.side==='li'?'L':'M')+t.dataset.id);
+      if(a==='case-pair') jumpToPair(t.dataset.li,t.dataset.lii,t.dataset.mg,t.dataset.mgi);
+      return;
+    }
+    var row = t.closest ? t.closest('.pair-row') : null;
+    if(row && row.dataset.li){
+      jumpToPair(row.dataset.li, Number(row.dataset.lii), row.dataset.mg, Number(row.dataset.mgi));
+    }
+  });
+
+  ['slider-ov','slider-read','slider-graph'].forEach(function(id){
+    document.getElementById(id).addEventListener('input', function(e){ setThreshold(e.target.value); });
+  });
+  document.getElementById('hl-toggle').addEventListener('change', function(e){
+    state.hl = e.target.checked; renderPair();
+  });
+  document.getElementById('graph-scope').addEventListener('change', function(e){
+    state.scope = Number(e.target.value); renderGraph();
+  });
+  document.getElementById('btn-prev').addEventListener('click', function(){
+    if(!state.current.length) return;
+    state.idx = (state.idx - 1 + state.current.length) % state.current.length; renderPair();
+  });
+  document.getElementById('btn-next').addEventListener('click', function(){
+    if(!state.current.length) return;
+    state.idx = (state.idx + 1) % state.current.length; renderPair();
+  });
+  document.getElementById('btn-rand').addEventListener('click', function(){
+    if(!state.current.length) return;
+    state.idx = Math.floor(Math.random()*state.current.length); renderPair();
+  });
+  document.getElementById('btn-to-graph').addEventListener('click', function(){
+    if(!state.current.length) return;
+    var p = state.current[state.idx];
+    focusGraph('L'+p.li_poem_id);
+  });
+  document.getElementById('btn-reset').addEventListener('click', function(){
+    document.getElementById('search').value='';
+    chartGraph.dispatchAction({type:'downplay', seriesIndex:0});
+    renderGraph();
+    setThreshold(7000);
+  });
+  document.getElementById('search').addEventListener('keydown', function(e){
+    if(e.key!=='Enter' || !chartGraph) return;
+    var q = this.value.trim();
+    if(!q) return;
+    var gd = graphData(), hit = -1;
+    for(var i=0;i<gd.nodes.length;i++){ if((gd.nodes[i].name||'').indexOf(q)>=0){ hit=i; break; } }
+    if(hit<0) return;
+    chartGraph.dispatchAction({type:'highlight', seriesIndex:0, dataIndex:hit});
+    chartGraph.dispatchAction({type:'focusNodeAdjacency', seriesIndex:0, dataIndex:hit});
+    showPoem(gd.nodes[hit].id);
+  });
+  document.getElementById('ctx-head').addEventListener('click', function(){
+    var b = document.getElementById('ctx-body');
+    var open = b.style.display !== 'none';
+    b.style.display = open ? 'none' : 'grid';
+    document.getElementById('ctx-caret').textContent = open ? '▸' : '▾';
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.target.tagName==='INPUT') return;
+    if(e.key==='ArrowLeft'){ document.getElementById('btn-prev').click(); }
+    if(e.key==='ArrowRight'){ document.getElementById('btn-next').click(); }
+    if(e.key===' ' && e.target===document.body){ e.preventDefault(); document.getElementById('ctx-head').click(); }
+  });
+
+  /* ---------- 导航高亮 ---------- */
+  var secs = ['cover','life','overview','read','graph-sec','cases','declare'];
+  function highlightNav(){
+    var y = window.scrollY + window.innerHeight/3, active = secs[0];
+    secs.forEach(function(s){
+      var el = document.getElementById(s);
+      if(el && el.offsetTop <= y) active = s;
+    });
+    document.querySelectorAll('#rail a').forEach(function(a){
+      a.classList.toggle('on', a.dataset.sec===active);
+    });
+    document.getElementById('rail').style.opacity = (active==='cover') ? '0' : '1';
+    document.getElementById('rail').style.pointerEvents = (active==='cover') ? 'none' : 'auto';
+  }
+  window.addEventListener('scroll', highlightNav, {passive:true});
+  window.addEventListener('resize', function(){
+    if(chartHist) chartHist.resize();
+    if(chartRank) chartRank.resize();
+    if(chartGraph) chartGraph.resize();
+  });
+
+  /* ---------- 启动 ---------- */
+  renderLife();
+  state.current = filtered();
+  syncSliders();
+  renderCounts();
+  renderPair();
+  renderCases();
+  initCharts();
+  renderOverviewCharts();
+  renderGraph();
+  highlightNav();
+  // 支持 index.html#read 这类直达
+  if(location.hash){
+    var el = document.querySelector(location.hash);
+    if(el) el.scrollIntoView();
+  }
+  // 截图用：index.html?shot=read 直接定位到该章节
+  var shotTo = new URLSearchParams(location.search).get('shot');
+  if(shotTo){
+    var se = document.getElementById(shotTo);
+    if(se){ window.scrollTo(0, se.offsetTop + 4); }
+  }
+})();
+</script>
+</body>
+</html>
